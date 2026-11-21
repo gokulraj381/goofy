@@ -1,0 +1,137 @@
+/*
+  Display test for Waveshare ESP32-C6-Touch-LCD-1.47 (172 x 320, JD9853)
+
+  Library : "GFX Library for Arduino" by moononournation, v1.5.9
+            (the version Waveshare's Arduino guide lists for this board)
+  Board   : ESP32C6 Dev Module
+  Tools   : USB CDC On Boot = Enabled (so Serial prints over the USB-C port)
+
+  Pins are from Waveshare's GPIO table for this board:
+    LCD SCK  = GPIO1   (shared with TF card)
+    LCD MOSI = GPIO2   (shared with TF card)
+    LCD CS   = GPIO14
+    LCD DC   = GPIO15
+    LCD RST  = GPIO22
+    LCD BL   = GPIO23
+    TF  CS   = GPIO4   (held HIGH here so the card stays off the shared bus)
+
+  What you should see, repeating:
+    1. full-screen red, green, blue, white, black (1 s each)
+    2. a white outline exactly on the screen edge with a yellow cross,
+       eight colour bars, and text
+*/
+
+#include <Arduino_GFX_Library.h>
+
+#define LCD_SCK   1
+#define LCD_MOSI  2
+#define LCD_CS    14
+#define LCD_DC    15
+#define LCD_RST   22
+#define LCD_BL    23
+#define TF_CS     4
+
+// If the backlight stays dark, change this to LOW.
+#define BL_ON     HIGH
+
+// If colours look inverted (white shows as black), change this to true.
+#define LCD_IPS   false
+
+Arduino_DataBus *bus = new Arduino_ESP32SPI(
+  LCD_DC, LCD_CS, LCD_SCK, LCD_MOSI, GFX_NOT_DEFINED /* MISO */);
+
+// Waveshare's example drives this panel with the ST7789 class.
+// The 172-pixel-wide panel sits 34 columns into the controller's 240.
+Arduino_GFX *gfx = new Arduino_ST7789(
+  bus, LCD_RST, 0 /* rotation */, LCD_IPS,
+  172 /* width */, 320 /* height */,
+  34 /* col_offset1 */, 0 /* row_offset1 */,
+  34 /* col_offset2 */, 0 /* row_offset2 */);
+
+void showPattern() {
+  const int16_t w = gfx->width();
+  const int16_t h = gfx->height();
+
+  gfx->fillScreen(RGB565_BLACK);
+
+  // Outline on the very edge: all four sides must be visible.
+  gfx->drawRect(0, 0, w, h, RGB565_WHITE);
+
+  // Cross through the centre.
+  gfx->drawLine(0, 0, w - 1, h - 1, RGB565_YELLOW);
+  gfx->drawLine(w - 1, 0, 0, h - 1, RGB565_YELLOW);
+
+  // Eight colour bars across the middle.
+  const uint16_t bars[8] = {
+    RGB565_WHITE, RGB565_YELLOW, RGB565_CYAN, RGB565_GREEN,
+    RGB565_MAGENTA, RGB565_RED, RGB565_BLUE, RGB565_BLACK
+  };
+  const int16_t barW = (w - 12) / 8;
+  for (int i = 0; i < 8; i++) {
+    gfx->fillRect(6 + i * barW, 110, barW, 60, bars[i]);
+  }
+
+  gfx->setTextColor(RGB565_WHITE);
+  gfx->setTextSize(2);
+  gfx->setCursor(10, 20);
+  gfx->println("ESP32-C6");
+  gfx->setCursor(10, 44);
+  gfx->println("1.47 Touch");
+
+  gfx->setTextSize(1);
+  gfx->setCursor(10, 76);
+  gfx->print(w);
+  gfx->print(" x ");
+  gfx->print(h);
+  gfx->println(" px");
+
+  gfx->setTextColor(RGB565_GREEN);
+  gfx->setTextSize(2);
+  gfx->setCursor(10, 200);
+  gfx->println("Display OK");
+
+  gfx->setTextColor(RGB565_RED);
+  gfx->setCursor(10, 240);
+  gfx->print("R ");
+  gfx->setTextColor(RGB565_GREEN);
+  gfx->print("G ");
+  gfx->setTextColor(RGB565_BLUE);
+  gfx->print("B");
+}
+
+void setup() {
+  Serial.begin(115200);
+  delay(500);
+  Serial.println("Display test starting");
+
+  // Keep the TF card deselected: it shares SCK and MOSI with the LCD.
+  pinMode(TF_CS, OUTPUT);
+  digitalWrite(TF_CS, HIGH);
+
+  pinMode(LCD_BL, OUTPUT);
+  digitalWrite(LCD_BL, BL_ON);
+
+  if (!gfx->begin()) {
+    Serial.println("gfx->begin() failed");
+  } else {
+    Serial.println("gfx->begin() ok");
+  }
+}
+
+void loop() {
+  const uint16_t fills[5] = {
+    RGB565_RED, RGB565_GREEN, RGB565_BLUE, RGB565_WHITE, RGB565_BLACK
+  };
+  const char *names[5] = {"red", "green", "blue", "white", "black"};
+
+  for (int i = 0; i < 5; i++) {
+    gfx->fillScreen(fills[i]);
+    Serial.print("fill: ");
+    Serial.println(names[i]);
+    delay(1000);
+  }
+
+  showPattern();
+  Serial.println("pattern");
+  delay(5000);
+}
